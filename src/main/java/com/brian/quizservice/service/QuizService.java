@@ -1,5 +1,6 @@
 package com.brian.quizservice.service;
 
+import com.brian.quizservice.feign.QuizInterface;
 import com.brian.quizservice.model.Question;
 import com.brian.quizservice.model.QuestionWrapper;
 import com.brian.quizservice.model.Quiz;
@@ -17,6 +18,10 @@ import java.util.List;
 public class QuizService {
     @Autowired
     private QuizRepository quizRepository;
+    @Autowired
+    private QuizInterface quizInterface;
+    @Autowired
+    private  Quiz quiz;
 
 
     public ResponseEntity<String> createQuiz( String category,  int numQuestions,  String title) {
@@ -27,34 +32,25 @@ public class QuizService {
         //every microservice which wants  to search the other will register to a eureka server, and from there
        // any of them will connect to the eureka server
         //every service will have a name such that u dont depend on the port and ip number
+        List<Integer> questions = quizInterface.getQuestionsForQuiz(category,numQuestions).getBody();
+        quiz.setTitle(title);
+        quiz.setQuestionIds(questions);
+        quizRepository.save(quiz);
+
+        return  new ResponseEntity<>("success", HttpStatus.CREATED);
     }
 
     public ResponseEntity<List<QuestionWrapper>> getQuiz(Integer id) {
         Quiz quiz1= quizRepository.findById(id).orElseThrow();
-        List<Question> questionsFromDB = quiz1.getQuestions();
-        List<QuestionWrapper> questionForUser = new ArrayList<>();
-
-        for(Question question: questionsFromDB){
-            QuestionWrapper questionWrapper = new QuestionWrapper(question.getId(),question.getOption1(),question.getOption2(),question.getOption3(),question.getOption4(),question.getQuestionTitle());
-            questionForUser.add(questionWrapper);
-        }
-        return  new ResponseEntity<>(questionForUser, HttpStatus.OK);
+        List<Integer> questionIds = quiz1.getQuestionIds();
+        ResponseEntity<List<QuestionWrapper>> questionForUser =quizInterface.getQuestionsFromId(questionIds);
+        return  questionForUser;
 
     }
 
     public ResponseEntity<Integer> calculateResult(Integer id, List<Response> responses) {
-        Quiz quiz  = quizRepository.findById(id).orElseThrow();
-        List<Question> questions = quiz.getQuestions();
-        int correct = 0;
-        int i = 0;
-        for(Response response1: responses){
-            if(response1.getResponse().equals(questions.get(i).getRightAnswer())){
-                correct++;
-            }
-            i++;
-
-        }
-        return  new ResponseEntity<>(correct, HttpStatus.OK);
+        ResponseEntity<Integer> score = quizInterface.getScore(responses);
+        return score;
 
     }
 }
